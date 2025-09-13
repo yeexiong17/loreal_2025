@@ -5,8 +5,10 @@ import { apiService } from '../services/api';
 interface AnalysisContextType {
   analysisStatus: AnalysisStatus | null;
   isAnalysisRunning: boolean;
+  canResume: boolean;
   startAnalysis: () => Promise<void>;
-  stopAnalysis: () => void;
+  resumeAnalysis: () => Promise<void>;
+  stopAnalysis: () => Promise<void>;
   refreshStatus: () => Promise<void>;
   clearAnalysis: () => void;
 }
@@ -34,6 +36,7 @@ export const AnalysisProvider: React.FC<AnalysisProviderProps> = ({ children }) 
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
 
   const isAnalysisRunning = analysisStatus?.status === 'processing';
+  const canResume = analysisStatus?.status === 'stopped' && analysisStatus?.processed_comments > 0;
 
   const startAnalysis = async () => {
     try {
@@ -61,39 +64,78 @@ export const AnalysisProvider: React.FC<AnalysisProviderProps> = ({ children }) 
     }
   };
 
+  const resumeAnalysis = async () => {
+    if (!analysisStatus?.analysis_id) {
+      throw new Error('No analysis to resume');
+    }
+
+    try {
+      console.log('Resuming analysis:', analysisStatus.analysis_id);
+      const result = await apiService.resumeAnalysis(analysisStatus.analysis_id);
+      
+      if (result.analysis_id) {
+        // Update status to processing
+        const resumedStatus = { ...analysisStatus, status: 'processing' as const };
+        setAnalysisStatus(resumedStatus);
+        localStorage.setItem('analysisStatus', JSON.stringify(resumedStatus));
+
+        // Start polling for status updates
+        startPolling(result.analysis_id);
+      }
+    } catch (error) {
+      console.error('Failed to resume analysis:', error);
+      throw error;
+    }
+  };
+
   const stopAnalysis = async () => {
+    console.log('stopAnalysis called, current status:', analysisStatus);
+    console.log('pollingInterval exists:', !!pollingInterval);
+    
+    // Stop polling immediately
     if (pollingInterval) {
+      console.log('Clearing polling interval');
       clearInterval(pollingInterval);
       setPollingInterval(null);
     }
 
     if (analysisStatus?.status === 'processing' && analysisStatus.analysis_id) {
+      console.log('Stopping analysis with ID:', analysisStatus.analysis_id);
       try {
         // Call backend to stop the analysis
-        await apiService.stopAnalysis(analysisStatus.analysis_id);
+        const result = await apiService.stopAnalysis(analysisStatus.analysis_id);
+        console.log('Backend stop response:', result);
 
         // Update local status
         const stoppedStatus = { ...analysisStatus, status: 'stopped' as const };
         setAnalysisStatus(stoppedStatus);
         localStorage.setItem('analysisStatus', JSON.stringify(stoppedStatus));
+        console.log('Status updated to stopped');
       } catch (error) {
         console.error('Failed to stop analysis:', error);
         // Still update local status even if backend call fails
         const stoppedStatus = { ...analysisStatus, status: 'stopped' as const };
         setAnalysisStatus(stoppedStatus);
         localStorage.setItem('analysisStatus', JSON.stringify(stoppedStatus));
+        console.log('Status updated to stopped (fallback)');
       }
+    } else {
+      console.log('No processing analysis to stop');
     }
   };
 
   const startPolling = (analysisId: string) => {
+    console.log('Starting polling for analysis ID:', analysisId);
     const interval = setInterval(async () => {
       try {
+        console.log('Polling status for analysis:', analysisId);
         const status = await apiService.getAnalysisStatus(analysisId);
+        console.log('Received status:', status);
         setAnalysisStatus(status);
         localStorage.setItem('analysisStatus', JSON.stringify(status));
 
-        if (status.status === 'completed' || status.status === 'failed') {
+        if (status.status === 'completed' || status.status === 'failed' || status.status === 'stopped') {
+          console.log('Analysis finished, stopping polling. Status:', status.status);
           clearInterval(interval);
           setPollingInterval(null);
         }
@@ -139,7 +181,7 @@ export const AnalysisProvider: React.FC<AnalysisProviderProps> = ({ children }) 
     };
 
     recoverAnalysis();
-  }, []); // Only run on mount
+  }, [analysisStatus?.status, analysisStatus?.analysis_id]); // Include dependencies
 
   // Cleanup on unmount
   useEffect(() => {
@@ -153,7 +195,9 @@ export const AnalysisProvider: React.FC<AnalysisProviderProps> = ({ children }) 
   const value: AnalysisContextType = {
     analysisStatus,
     isAnalysisRunning,
+    canResume,
     startAnalysis,
+    resumeAnalysis,
     stopAnalysis,
     refreshStatus,
     clearAnalysis,

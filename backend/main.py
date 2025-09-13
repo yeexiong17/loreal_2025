@@ -255,12 +255,29 @@ async def start_analysis(request: dict):
         log_analysis_step("❌ ANALYSIS START FAILED", "No comments to analyze. Please upload a file first.")
         raise HTTPException(status_code=400, detail="No comments to analyze. Please upload a file first.")
     
+    # Check if there's an existing stopped analysis to resume
+    resume_analysis_id = request.get("resume_analysis_id")
+    if resume_analysis_id and resume_analysis_id in analysis_results:
+        existing_analysis = analysis_results[resume_analysis_id]
+        if existing_analysis["status"] == "stopped":
+            log_analysis_step("🔄 RESUMING ANALYSIS", f"Resuming analysis ID: {resume_analysis_id}")
+            # Resume the existing analysis
+            analysis_results[resume_analysis_id]["status"] = "processing"
+            current_analysis_id = resume_analysis_id
+            
+            # Start analysis from where it left off
+            asyncio.create_task(run_ai_analysis(resume_analysis_id, resume=True))
+            
+            return {"analysis_id": resume_analysis_id, "status": "resumed"}
+    
+    # Start new analysis
     analysis_id = str(uuid.uuid4())
     current_analysis_id = analysis_id
     
     log_analysis_step("🎯 ANALYSIS STARTED", f"Analysis ID: {analysis_id}, Total comments: {len(comments_data)}")
     
     analysis_results[analysis_id] = {
+        "analysis_id": analysis_id,
         "status": "processing",
         "progress": 0,
         "total_comments": len(comments_data),
@@ -273,20 +290,29 @@ async def start_analysis(request: dict):
     
     return {"analysis_id": analysis_id, "status": "started"}
 
-async def run_ai_analysis(analysis_id: str):
+async def run_ai_analysis(analysis_id: str, resume: bool = False):
     """Run AI analysis on comments with detailed logging"""
     global analysis_results, comments_data, cancelled_analyses
     
-    log_analysis_step("🔄 BACKGROUND ANALYSIS STARTED", f"Analysis ID: {analysis_id}", analysis_id=analysis_id)
+    log_analysis_step("🔄 BACKGROUND ANALYSIS STARTED", f"Analysis ID: {analysis_id}, Resume: {resume}", analysis_id=analysis_id)
     
     try:
-        results = []
+        # Get existing results if resuming
+        if resume and analysis_id in analysis_results:
+            results = analysis_results[analysis_id].get("results", [])
+            start_index = len(results)
+            log_analysis_step("🔄 RESUMING FROM", f"Starting from comment {start_index + 1}", analysis_id=analysis_id)
+        else:
+            results = []
+            start_index = 0
+        
         total = len(comments_data)
         start_time = time.time()
         
-        log_analysis_step("⚙️ ANALYSIS PARAMETERS", f"Total comments: {total}, Model: gpt-4o-mini, Delay: 0.2s", analysis_id=analysis_id)
+        log_analysis_step("⚙️ ANALYSIS PARAMETERS", f"Total comments: {total}, Start index: {start_index}, Model: gpt-4o-mini, Delay: 0.2s", analysis_id=analysis_id)
         
-        for i, comment in enumerate(comments_data):
+        for i in range(start_index, total):
+            comment = comments_data[i]
             # Check if analysis was cancelled
             if analysis_id in cancelled_analyses:
                 log_analysis_step("🛑 ANALYSIS CANCELLED", f"Stopped at comment {i+1}/{total}", analysis_id=analysis_id)
@@ -295,13 +321,15 @@ async def run_ai_analysis(analysis_id: str):
                 return
             
             # Log progress every 10 comments or at milestones
-            if (i + 1) % 10 == 0 or i + 1 in [1, 5, 25, 50, 100, 250, 500, 1000]:
+            current_comment_num = i + 1
+            if current_comment_num % 10 == 0 or current_comment_num in [1, 5, 25, 50, 100, 250, 500, 1000]:
                 elapsed_time = time.time() - start_time
-                comments_per_second = (i + 1) / elapsed_time if elapsed_time > 0 else 0
-                estimated_remaining = (total - i - 1) / comments_per_second if comments_per_second > 0 else 0
+                comments_processed_in_session = current_comment_num - start_index
+                comments_per_second = comments_processed_in_session / elapsed_time if elapsed_time > 0 else 0
+                estimated_remaining = (total - current_comment_num) / comments_per_second if comments_per_second > 0 else 0
                 
                 log_analysis_step("📈 PROGRESS UPDATE", 
-                    f"Comment {i+1}/{total} ({((i+1)/total*100):.1f}%) | "
+                    f"Comment {current_comment_num}/{total} ({((current_comment_num)/total*100):.1f}%) | "
                     f"Speed: {comments_per_second:.2f} comments/sec | "
                     f"ETA: {estimated_remaining/60:.1f} minutes", 
                     analysis_id=analysis_id)
@@ -318,10 +346,11 @@ async def run_ai_analysis(analysis_id: str):
             results.append(comment)
             
             # Update progress
-            progress = int((i + 1) / total * 100)
+            current_comment_num = i + 1
+            progress = int((current_comment_num) / total * 100)
             analysis_results[analysis_id].update({
                 "progress": progress,
-                "processed_comments": i + 1,
+                "processed_comments": current_comment_num,
                 "results": results
             })
             
@@ -349,10 +378,16 @@ async def run_ai_analysis(analysis_id: str):
 @app.get("/api/analysis/status/{analysis_id}")
 async def get_analysis_status(analysis_id: str):
     """Get analysis status"""
+    log_analysis_step("📊 STATUS REQUEST", f"Analysis ID: {analysis_id}")
+    
     if analysis_id not in analysis_results:
+        log_analysis_step("❌ STATUS NOT FOUND", f"Analysis ID: {analysis_id}")
         raise HTTPException(status_code=404, detail="Analysis not found")
     
-    return analysis_results[analysis_id]
+    status = analysis_results[analysis_id]
+    log_analysis_step("✅ STATUS RETURNED", f"Status: {status['status']}, Progress: {status['progress']}%, Processed: {status['processed_comments']}/{status['total_comments']}")
+    
+    return status
 
 @app.post("/api/analysis/stop/{analysis_id}")
 async def stop_analysis(analysis_id: str):

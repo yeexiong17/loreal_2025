@@ -73,8 +73,10 @@ export const apiService = {
   },
 
   // Analysis
-  startAnalysis: (request: AnalysisRequest): Promise<{ analysis_id: string }> => 
+  startAnalysis: (request: AnalysisRequest): Promise<{ analysis_id: string; status: string }> => 
     api.post('/api/analysis/start', request).then(res => res.data),
+  resumeAnalysis: (analysisId: string): Promise<{ analysis_id: string; status: string }> => 
+    api.post('/api/analysis/start', { resume_analysis_id: analysisId }).then(res => res.data),
   stopAnalysis: (analysisId: string): Promise<{ message: string; analysis_id: string }> => 
     api.post(`/api/analysis/stop/${analysisId}`).then(res => res.data),
   getAnalysisStatus: (analysisId: string): Promise<AnalysisStatus> => 

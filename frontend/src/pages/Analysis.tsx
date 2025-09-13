@@ -26,7 +26,7 @@ import {
 import { useAnalysis } from '../contexts/AnalysisContext';
 
 const Analysis: React.FC = () => {
-  const { analysisStatus, isAnalysisRunning, startAnalysis, stopAnalysis, refreshStatus, clearAnalysis } = useAnalysis();
+  const { analysisStatus, isAnalysisRunning, canResume, startAnalysis, resumeAnalysis, stopAnalysis, refreshStatus, clearAnalysis } = useAnalysis();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recovered, setRecovered] = useState(false);
@@ -43,11 +43,26 @@ const Analysis: React.FC = () => {
     }
   };
 
+  const handleResumeAnalysis = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      await resumeAnalysis();
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to resume analysis');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleStopAnalysis = async () => {
     try {
       setLoading(true);
+      console.log('Stop analysis clicked, current status:', analysisStatus);
       await stopAnalysis();
+      console.log('Stop analysis completed');
     } catch (err: any) {
+      console.error('Stop analysis error:', err);
       setError(err.response?.data?.detail || 'Failed to stop analysis');
     } finally {
       setLoading(false);
@@ -114,15 +129,28 @@ const Analysis: React.FC = () => {
             </List>
 
             <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
-              <Button
-                variant="contained"
-                onClick={handleStartAnalysis}
-                disabled={loading || isAnalysisRunning}
-                startIcon={<StartIcon />}
-                size="large"
-              >
-                {loading ? 'Starting...' : 'Start Analysis'}
-              </Button>
+              {canResume ? (
+                <Button
+                  variant="contained"
+                  onClick={handleResumeAnalysis}
+                  disabled={loading || isAnalysisRunning}
+                  startIcon={<StartIcon />}
+                  size="large"
+                  color="secondary"
+                >
+                  {loading ? 'Resuming...' : 'Resume Analysis'}
+                </Button>
+              ) : (
+                <Button
+                  variant="contained"
+                  onClick={handleStartAnalysis}
+                  disabled={loading || isAnalysisRunning}
+                  startIcon={<StartIcon />}
+                  size="large"
+                >
+                  {loading ? 'Starting...' : 'Start Analysis'}
+                </Button>
+              )}
 
               {isAnalysisRunning && (
                 <Button
@@ -169,6 +197,14 @@ const Analysis: React.FC = () => {
             {recovered && analysisStatus && (
               <Alert severity="info" sx={{ mt: 2 }}>
                 Analysis state recovered from previous session. Current status: {analysisStatus.status}
+                {canResume && ` - You can resume from ${analysisStatus.processed_comments} processed comments`}
+              </Alert>
+            )}
+
+            {canResume && (
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                Analysis was stopped at {analysisStatus?.processed_comments} out of {analysisStatus?.total_comments} comments. 
+                Click "Resume Analysis" to continue from where it left off.
               </Alert>
             )}
           </Paper>
