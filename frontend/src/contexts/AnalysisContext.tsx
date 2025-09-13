@@ -10,7 +10,7 @@ interface AnalysisContextType {
   resumeAnalysis: () => Promise<void>;
   stopAnalysis: () => Promise<void>;
   refreshStatus: () => Promise<void>;
-  clearAnalysis: () => void;
+  clearAnalysis: () => Promise<void>;
 }
 
 const AnalysisContext = createContext<AnalysisContextType | undefined>(undefined);
@@ -134,7 +134,7 @@ export const AnalysisProvider: React.FC<AnalysisProviderProps> = ({ children }) 
         setAnalysisStatus(status);
         localStorage.setItem('analysisStatus', JSON.stringify(status));
 
-        if (status.status === 'completed' || status.status === 'failed' || status.status === 'stopped') {
+        if (status.status === 'completed' || status.status === 'failed' || status.status === 'stopped' || status.status === 'stopping') {
           console.log('Analysis finished, stopping polling. Status:', status.status);
           clearInterval(interval);
           setPollingInterval(null);
@@ -161,13 +161,29 @@ export const AnalysisProvider: React.FC<AnalysisProviderProps> = ({ children }) 
     }
   };
 
-  const clearAnalysis = () => {
+  const clearAnalysis = async () => {
+    // Stop polling immediately
     if (pollingInterval) {
       clearInterval(pollingInterval);
       setPollingInterval(null);
     }
+
+    // Stop any running analysis
+    if (analysisStatus?.status === 'processing' && analysisStatus.analysis_id) {
+      try {
+        await apiService.stopAnalysis(analysisStatus.analysis_id);
+        console.log('Analysis stopped during clear');
+      } catch (error) {
+        console.error('Failed to stop analysis during clear:', error);
+      }
+    }
+
+    // Clear local state
     setAnalysisStatus(null);
     localStorage.removeItem('analysisStatus');
+    
+    // Reset to latest chosen model (this will be handled by the model switcher)
+    console.log('Analysis cleared, ready for new analysis');
   };
 
   // Recovery mechanism - check for running analysis on mount

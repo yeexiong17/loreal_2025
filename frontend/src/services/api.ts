@@ -10,14 +10,25 @@ import {
   ConfigurationData,
   ApiResponse 
 } from '../types';
+import { getCurrentApiUrl, backendSwitcher } from './backendSwitcher';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-
+// Create API instance that will be updated dynamically
 const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: getCurrentApiUrl(),
   headers: {
     'Content-Type': 'application/json',
   },
+});
+
+// Function to update API base URL when backend changes
+export const updateApiBaseUrl = () => {
+  api.defaults.baseURL = getCurrentApiUrl();
+};
+
+// Listen for backend changes and automatically update API URL
+backendSwitcher.addListener((backend) => {
+  console.log('Backend changed, updating API URL to:', backend.url);
+  api.defaults.baseURL = backend.url;
 });
 
 // Request interceptor
@@ -49,6 +60,9 @@ api.interceptors.response.use(
 );
 
 export const apiService = {
+  // Health check
+  getHealth: () => api.get('/health').then(res => res.data),
+  
   // Dashboard
   getDashboardStats: (): Promise<DashboardStats> => 
     api.get('/api/dashboard/stats').then(res => res.data),
@@ -89,6 +103,10 @@ export const apiService = {
     api.post('/api/analysis/categorization', { comment_ids: commentIds }).then(res => res.data),
   detectSpam: (commentIds: string[]) => 
     api.post('/api/analysis/spam-detection', { comment_ids: commentIds }).then(res => res.data),
+
+  // Analysis Modes
+  getAnalysisModes: () => api.get('/api/analysis/modes').then(res => res.data),
+  setAnalysisMode: (mode: string) => api.post('/api/analysis/mode', { mode }).then(res => res.data),
 
   // Configuration
   getConfiguration: (): Promise<ConfigurationData> => 

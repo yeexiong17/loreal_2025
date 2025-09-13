@@ -1,11 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
   Paper,
   Button,
-  Card,
-  CardContent,
   Grid,
   LinearProgress,
   Alert,
@@ -13,8 +11,6 @@ import {
   List,
   ListItem,
   ListItemText,
-  ListItemIcon,
-  Divider,
 } from '@mui/material';
 import {
   PlayArrow as StartIcon,
@@ -24,12 +20,42 @@ import {
   Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { useAnalysis } from '../contexts/AnalysisContext';
+import BackendInstructions from '../components/BackendInstructions';
+import ModelSwitcher from '../components/ModelSwitcher';
+import ModelSpecificOptions from '../components/ModelSpecificOptions';
+import { backendSwitcher } from '../services/backendSwitcher';
 
 const Analysis: React.FC = () => {
   const { analysisStatus, isAnalysisRunning, canResume, startAnalysis, resumeAnalysis, stopAnalysis, refreshStatus, clearAnalysis } = useAnalysis();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentBackend, setCurrentBackend] = useState(backendSwitcher.getCurrentBackend());
   const [recovered, setRecovered] = useState(false);
+  const [backendConnected, setBackendConnected] = useState(false);
+
+  // Listen for backend changes
+  useEffect(() => {
+    const handleBackendChange = (backend: any) => {
+      setCurrentBackend(backend);
+    };
+
+    backendSwitcher.addListener(handleBackendChange);
+    return () => {
+      backendSwitcher.removeListener(handleBackendChange);
+    };
+  }, []);
+
+  // Check backend connection status
+  useEffect(() => {
+    const checkConnection = async () => {
+      const status = await backendSwitcher.checkBackendHealth();
+      setBackendConnected(status.healthy);
+    };
+    
+    checkConnection();
+    const interval = setInterval(checkConnection, 5000); // Check every 5 seconds
+    return () => clearInterval(interval);
+  }, [currentBackend]);
 
   const handleStartAnalysis = async () => {
     try {
@@ -69,6 +95,20 @@ const Analysis: React.FC = () => {
     }
   };
 
+  const handleClearAnalysis = async () => {
+    try {
+      setLoading(true);
+      console.log('Clear analysis clicked');
+      await clearAnalysis();
+      console.log('Clear analysis completed');
+    } catch (err: any) {
+      console.error('Clear analysis error:', err);
+      setError(err.response?.data?.detail || 'Failed to clear analysis');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Check if analysis was recovered from localStorage
   React.useEffect(() => {
     if (analysisStatus && !recovered) {
@@ -81,6 +121,7 @@ const Analysis: React.FC = () => {
       case 'completed': return 'success';
       case 'failed': return 'error';
       case 'stopped': return 'warning';
+      case 'stopping': return 'warning';
       case 'processing': return 'primary';
       default: return 'default';
     }
@@ -91,6 +132,7 @@ const Analysis: React.FC = () => {
       case 'completed': return <CompleteIcon />;
       case 'failed': return <ErrorIcon />;
       case 'stopped': return <StopIcon />;
+      case 'stopping': return <StopIcon />;
       case 'processing': return <RefreshIcon />;
       default: return <RefreshIcon />;
     }
@@ -180,10 +222,11 @@ const Analysis: React.FC = () => {
                 <Button
                   variant="outlined"
                   color="secondary"
-                  onClick={clearAnalysis}
+                  onClick={handleClearAnalysis}
+                  disabled={loading}
                   size="large"
                 >
-                  Clear Analysis
+                  {loading ? 'Clearing...' : 'Clear Analysis'}
                 </Button>
               )}
             </Box>
@@ -257,86 +300,21 @@ const Analysis: React.FC = () => {
         </Grid>
 
         <Grid item xs={12} md={4}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Analysis Features
-              </Typography>
-
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Quality Scoring
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  Evaluates comment quality based on length, readability, engagement, and content quality.
-                </Typography>
-              </Box>
-
-              <Divider sx={{ my: 2 }} />
-
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Sentiment Analysis
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  Uses OpenAI GPT to analyze sentiment with beauty/skincare context awareness.
-                </Typography>
-              </Box>
-
-              <Divider sx={{ my: 2 }} />
-
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Categorization
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  Automatically categorizes comments into skincare, makeup, fragrance, and haircare.
-                </Typography>
-              </Box>
-
-              <Divider sx={{ my: 2 }} />
-
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  Spam Detection
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  Machine learning model to identify and filter out spam comments.
-                </Typography>
-              </Box>
-            </CardContent>
-          </Card>
-
-          <Card sx={{ mt: 2 }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Processing Time
-              </Typography>
-              <Typography variant="body2" color="textSecondary">
-                Analysis time depends on the number of comments:
-              </Typography>
-              <List dense>
-                <ListItem>
-                  <ListItemText
-                    primary="1,000 comments"
-                    secondary="~2-3 minutes"
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemText
-                    primary="10,000 comments"
-                    secondary="~15-20 minutes"
-                  />
-                </ListItem>
-                <ListItem>
-                  <ListItemText
-                    primary="100,000+ comments"
-                    secondary="~2-3 hours"
-                  />
-                </ListItem>
-              </List>
-            </CardContent>
-          </Card>
+          {/* Model Switcher - Main control */}
+          <ModelSwitcher 
+            currentBackend={currentBackend} 
+            onBackendChange={setCurrentBackend} 
+          />
+          
+          {/* Model-specific options */}
+          <Box sx={{ mt: 2 }}>
+            <ModelSpecificOptions currentBackend={currentBackend} />
+          </Box>
+          
+          {/* Instructions (only show when disconnected) */}
+          <Box sx={{ mt: 2 }}>
+            <BackendInstructions show={!backendConnected} />
+          </Box>
         </Grid>
       </Grid>
     </Box>

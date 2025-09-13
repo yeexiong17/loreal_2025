@@ -52,9 +52,26 @@ export interface AnalysisRequest {
   batch_size?: number;
 }
 
+export interface AnalysisMode {
+  mode: string;
+  comments_per_minute: number;
+  accuracy: number;
+  cost_per_1000: number;
+}
+
+export interface AnalysisModesResponse {
+  modes: string[];
+  current_mode: string;
+  performance_estimates: {
+    fast: AnalysisMode;
+    balanced: AnalysisMode;
+    accurate: AnalysisMode;
+  };
+}
+
 export interface AnalysisStatus {
   analysis_id: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed' | 'stopped';
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'stopped' | 'stopping';
   progress: number;
   total_comments: number;
   processed_comments: number;

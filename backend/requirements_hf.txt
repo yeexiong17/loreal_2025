@@ -1,0 +1,19 @@
+# Hugging Face Pipeline Dependencies
+# Install these additional packages for the new analysis system
+
+# Core ML libraries
+transformers>=4.30.0
+torch>=2.0.0
+accelerate>=0.20.0
+
+# Optional: For better performance
+# torch-audio  # For audio processing if needed
+# torch-vision  # For image processing if needed
+
+# Optional: For specific model optimizations
+# optimum  # For model optimization
+# onnx  # For ONNX model support
+# onnxruntime  # For ONNX runtime
+
+# Note: Install with: pip install -r requirements_hf.txt
+# Or install individually: pip install transformers torch accelerate

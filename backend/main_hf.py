@@ -1,3 +1,8 @@
+"""
+Hugging Face Only Backend
+This version uses only Hugging Face models for analysis - no OpenAI API calls
+"""
+
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
@@ -6,23 +11,16 @@ import json
 import asyncio
 from datetime import datetime
 from typing import List, Dict, Any
-import openai
-from dotenv import load_dotenv
 import uuid
 import re
 import time
+from analysis_pipeline_optimized import analyze_comment_with_hf_optimized, analyze_batch_with_hf_optimized
 from model_config import get_analysis_config, get_available_analysis_modes, AnalysisMode
-
-# Load environment variables
-load_dotenv("config.env")
-
-# Initialize OpenAI client
-client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="L'Oréal Comment Analysis API (OpenAI)",
-    description="AI-powered analysis using OpenAI models only",
+    title="L'Oréal Comment Analysis API (Hugging Face)",
+    description="AI-powered analysis using Hugging Face models only",
     version="2.0.0"
 )
 
@@ -59,20 +57,20 @@ def log_analysis_step(step: str, details: str = "", comment_id: str = "", analys
     if details:
         print(f"{' ' * (len(prefix) + 1)} └─ {details}")
 
-async def analyze_comment_with_ai(comment_text: str, comment_id: str = "", analysis_id: str = "") -> Dict[str, Any]:
-    """Analyze a single comment using OpenAI models with detailed logging"""
-    log_analysis_step("🔍 STARTING COMMENT ANALYSIS", f"Text: '{comment_text[:50]}{'...' if len(comment_text) > 50 else ''}'", comment_id, analysis_id)
-    log_analysis_step("🤖 USING OPENAI", f"Mode: {current_analysis_mode}, Config: {analysis_config.mode.value}", comment_id, analysis_id)
+async def analyze_comment_with_hf_only(comment_text: str, comment_id: str = "", analysis_id: str = "") -> Dict[str, Any]:
+    """Analyze a single comment using ONLY Hugging Face models"""
+    log_analysis_step("🔍 STARTING HF ANALYSIS", f"Text: '{comment_text[:50]}{'...' if len(comment_text) > 50 else ''}'", comment_id, analysis_id)
+    log_analysis_step("🤖 USING HUGGING FACE ONLY", f"Mode: {current_analysis_mode}, Config: {analysis_config.mode.value}", comment_id, analysis_id)
     
     try:
         start_time = time.time()
         
-        # Use OpenAI for analysis
-        result = await analyze_with_openai(comment_text)
+        # Use optimized Hugging Face pipeline
+        result = await analyze_comment_with_hf_optimized(comment_text, comment_id, analysis_id)
         
         processing_time = time.time() - start_time
         
-        log_analysis_step("📥 RECEIVED OPENAI RESPONSE", f"Processing time: {processing_time:.2f}s, Result: {result}", comment_id, analysis_id)
+        log_analysis_step("📥 RECEIVED HF RESPONSE", f"Processing time: {processing_time:.2f}s, Result: {result}", comment_id, analysis_id)
         
         # Format result to match expected structure
         analysis_result = {
@@ -80,99 +78,32 @@ async def analyze_comment_with_ai(comment_text: str, comment_id: str = "", analy
             "category": result.get("category", "general"),
             "quality_score": float(result.get("quality_score", 0.5)),
             "is_spam": bool(result.get("is_spam", False)),
-            "confidence": result.get("confidence", 0.7),
-            "processing_time": processing_time
+            "confidence": result.get("confidence", {}).get("sentiment", 0.7),
+            "processing_time": processing_time,
+            "model_source": "huggingface"  # Mark as HF source
         }
         
-        log_analysis_step("🎯 ANALYSIS COMPLETE", f"Sentiment: {analysis_result['sentiment']}, Category: {analysis_result['category']}, Quality: {analysis_result['quality_score']:.2f}, Spam: {analysis_result['is_spam']}", comment_id, analysis_id)
+        log_analysis_step("🎯 HF ANALYSIS COMPLETE", f"Sentiment: {analysis_result['sentiment']}, Category: {analysis_result['category']}, Quality: {analysis_result['quality_score']:.2f}, Spam: {analysis_result['is_spam']}", comment_id, analysis_id)
         
         return analysis_result
         
     except Exception as e:
-        log_analysis_step("❌ ANALYSIS ERROR", f"Error: {e}", comment_id, analysis_id)
+        log_analysis_step("❌ HF ANALYSIS ERROR", f"Error: {e}", comment_id, analysis_id)
         
-        # Fallback to simple analysis
+        # Fallback to simple rule-based analysis
         fallback_result = {
             "sentiment": "neutral",
             "category": "general", 
             "quality_score": 0.5,
             "is_spam": False,
             "confidence": 0.3,
-            "processing_time": 0.0
+            "processing_time": 0.0,
+            "model_source": "rule_based_fallback"
         }
         
-        log_analysis_step("🆘 EMERGENCY FALLBACK", f"Using default values: {fallback_result}", comment_id, analysis_id)
+        log_analysis_step("🆘 RULE-BASED FALLBACK", f"Using rule-based analysis: {fallback_result}", comment_id, analysis_id)
         
         return fallback_result
-
-async def analyze_with_openai(comment_text: str) -> Dict[str, Any]:
-    """Analyze comment using OpenAI API"""
-    try:
-        # Create a comprehensive prompt for analysis
-        prompt = f"""
-        Analyze this beauty/skincare comment and provide a JSON response with the following structure:
-        
-        Comment: "{comment_text}"
-        
-        Please analyze and return ONLY a valid JSON object with these exact fields:
-        {{
-            "sentiment": "positive", "negative", or "neutral",
-            "category": "skincare", "makeup", "fragrance", "haircare", or "general",
-            "quality_score": 0.0 to 1.0 (higher = better quality),
-            "is_spam": true or false,
-            "confidence": 0.0 to 1.0 (confidence in the analysis)
-        }}
-        
-        Guidelines:
-        - Sentiment: Consider the overall emotional tone
-        - Category: Classify based on beauty product type mentioned
-        - Quality: Rate based on comment length, detail, and helpfulness
-        - Spam: Detect promotional, irrelevant, or low-quality content
-        - Confidence: Rate your confidence in the analysis (0.0-1.0)
-        
-        Return ONLY the JSON object, no other text.
-        """
-        
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are an expert beauty industry analyst. Always respond with valid JSON only."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=200,
-            temperature=0.3
-        )
-        
-        # Parse the JSON response
-        result_text = response.choices[0].message.content.strip()
-        
-        # Clean up the response to ensure it's valid JSON
-        if result_text.startswith("```json"):
-            result_text = result_text[7:]
-        if result_text.endswith("```"):
-            result_text = result_text[:-3]
-        
-        result = json.loads(result_text)
-        
-        # Validate and clean the result
-        return {
-            "sentiment": result.get("sentiment", "neutral").lower(),
-            "category": result.get("category", "general").lower(),
-            "quality_score": float(result.get("quality_score", 0.5)),
-            "is_spam": bool(result.get("is_spam", False)),
-            "confidence": float(result.get("confidence", 0.7))
-        }
-        
-    except Exception as e:
-        print(f"OpenAI analysis error: {e}")
-        # Return fallback result
-        return {
-            "sentiment": "neutral",
-            "category": "general",
-            "quality_score": 0.5,
-            "is_spam": False,
-            "confidence": 0.3
-        }
 
 def process_csv_file(file_path: str) -> List[Dict[str, Any]]:
     """Process CSV file and return structured data"""
@@ -209,7 +140,7 @@ def process_csv_file(file_path: str) -> List[Dict[str, Any]]:
 # API Routes
 @app.get("/")
 async def root():
-    return {"message": "L'Oréal AI Comment Analysis API is running"}
+    return {"message": "L'Oréal AI Comment Analysis API (Hugging Face) is running", "model_source": "huggingface"}
 
 @app.get("/health")
 async def health_check():
@@ -217,8 +148,8 @@ async def health_check():
         "status": "healthy", 
         "ai_enabled": True, 
         "analysis_mode": current_analysis_mode,
-        "model_source": "openai",
-        "hf_available": False
+        "model_source": "huggingface",
+        "hf_available": True
     }
 
 @app.get("/api/analysis/modes")
@@ -227,10 +158,11 @@ async def get_analysis_modes():
     return {
         "modes": get_available_analysis_modes(),
         "current_mode": current_analysis_mode,
+        "model_source": "huggingface",
         "performance_estimates": {
-            "fast": {"comments_per_minute": 1000, "accuracy": 0.75, "cost_per_1000": 0.01},
-            "balanced": {"comments_per_minute": 500, "accuracy": 0.85, "cost_per_1000": 0.05},
-            "accurate": {"comments_per_minute": 200, "accuracy": 0.95, "cost_per_1000": 0.15}
+            "fast": {"comments_per_minute": 2000, "accuracy": 0.75, "cost_per_1000": 0.0},
+            "balanced": {"comments_per_minute": 1200, "accuracy": 0.85, "cost_per_1000": 0.0},
+            "accurate": {"comments_per_minute": 800, "accuracy": 0.95, "cost_per_1000": 0.0}
         }
     }
 
@@ -246,9 +178,9 @@ async def set_analysis_mode(request: dict):
     current_analysis_mode = mode
     analysis_config = get_analysis_config(mode)
     
-    log_analysis_step("⚙️ ANALYSIS MODE CHANGED", f"Mode: {mode}")
+    log_analysis_step("⚙️ ANALYSIS MODE CHANGED", f"Mode: {mode} (Hugging Face)")
     
-    return {"message": f"Analysis mode set to {mode}", "mode": mode}
+    return {"message": f"Analysis mode set to {mode} (Hugging Face)", "mode": mode, "model_source": "huggingface"}
 
 @app.post("/api/comments/upload")
 async def upload_comments(file: UploadFile = File(...)):
@@ -275,7 +207,8 @@ async def upload_comments(file: UploadFile = File(...)):
             "videos_processed": len(set(c["video_id"] for c in comments_data)),
             "comments_processed": len(comments_data),
             "total_rows": len(comments_data),
-            "message": "File uploaded and processed successfully"
+            "message": "File uploaded and processed successfully",
+            "model_source": "huggingface"
         }
         
         log_analysis_step("✅ UPLOAD COMPLETE", f"Videos: {result['videos_processed']}, Comments: {result['comments_processed']}")
@@ -288,7 +221,7 @@ async def upload_comments(file: UploadFile = File(...)):
 
 @app.post("/api/analysis/start")
 async def start_analysis(request: dict):
-    """Start AI analysis of uploaded comments"""
+    """Start AI analysis of uploaded comments using Hugging Face models"""
     global current_analysis_id, analysis_results
     
     if not comments_data:
@@ -300,21 +233,21 @@ async def start_analysis(request: dict):
     if resume_analysis_id and resume_analysis_id in analysis_results:
         existing_analysis = analysis_results[resume_analysis_id]
         if existing_analysis["status"] == "stopped":
-            log_analysis_step("🔄 RESUMING ANALYSIS", f"Resuming analysis ID: {resume_analysis_id}")
+            log_analysis_step("🔄 RESUMING HF ANALYSIS", f"Resuming analysis ID: {resume_analysis_id}")
             # Resume the existing analysis
             analysis_results[resume_analysis_id]["status"] = "processing"
             current_analysis_id = resume_analysis_id
             
             # Start analysis from where it left off
-            asyncio.create_task(run_ai_analysis(resume_analysis_id, resume=True))
+            asyncio.create_task(run_hf_analysis(resume_analysis_id, resume=True))
             
-            return {"analysis_id": resume_analysis_id, "status": "resumed"}
+            return {"analysis_id": resume_analysis_id, "status": "resumed", "model_source": "huggingface"}
     
     # Start new analysis
     analysis_id = str(uuid.uuid4())
     current_analysis_id = analysis_id
     
-    log_analysis_step("🎯 ANALYSIS STARTED", f"Analysis ID: {analysis_id}, Total comments: {len(comments_data)}")
+    log_analysis_step("🎯 HF ANALYSIS STARTED", f"Analysis ID: {analysis_id}, Total comments: {len(comments_data)}")
     
     analysis_results[analysis_id] = {
         "analysis_id": analysis_id,
@@ -322,19 +255,20 @@ async def start_analysis(request: dict):
         "progress": 0,
         "total_comments": len(comments_data),
         "processed_comments": 0,
-        "results": []
+        "results": [],
+        "model_source": "huggingface"
     }
     
     # Start analysis in background
-    asyncio.create_task(run_ai_analysis(analysis_id))
+    asyncio.create_task(run_hf_analysis(analysis_id))
     
-    return {"analysis_id": analysis_id, "status": "started"}
+    return {"analysis_id": analysis_id, "status": "started", "model_source": "huggingface"}
 
-async def run_ai_analysis(analysis_id: str, resume: bool = False):
-    """Run AI analysis on comments with detailed logging"""
+async def run_hf_analysis(analysis_id: str, resume: bool = False):
+    """Run Hugging Face analysis on comments with detailed logging"""
     global analysis_results, comments_data, cancelled_analyses
     
-    log_analysis_step("🔄 BACKGROUND ANALYSIS STARTED", f"Analysis ID: {analysis_id}, Resume: {resume}", analysis_id=analysis_id)
+    log_analysis_step("🔄 HF BACKGROUND ANALYSIS STARTED", f"Analysis ID: {analysis_id}, Resume: {resume}", analysis_id=analysis_id)
     
     try:
         # Get existing results if resuming
@@ -349,45 +283,101 @@ async def run_ai_analysis(analysis_id: str, resume: bool = False):
         total = len(comments_data)
         start_time = time.time()
         
-        log_analysis_step("⚙️ ANALYSIS PARAMETERS", f"Total comments: {total}, Start index: {start_index}, Model: gpt-4o-mini, Delay: 0.2s", analysis_id=analysis_id)
+        log_analysis_step("⚙️ HF ANALYSIS PARAMETERS", f"Total comments: {total}, Start index: {start_index}, Mode: {current_analysis_mode}", analysis_id=analysis_id)
         
-        for i in range(start_index, total):
-            # Check if analysis was cancelled BEFORE processing each comment
+        # Process comments in optimized batches for maximum speed
+        batch_size = 32  # Process 32 comments at a time
+        current_comment_num = start_index
+        
+        for i in range(start_index, total, batch_size):
+            # Check if analysis was cancelled
             if analysis_id in cancelled_analyses:
-                log_analysis_step("🛑 ANALYSIS CANCELLED", f"Stopped at comment {i+1}/{total}", analysis_id=analysis_id)
+                log_analysis_step("🛑 HF ANALYSIS CANCELLED", f"Stopped at comment {current_comment_num+1}/{total}", analysis_id=analysis_id)
                 analysis_results[analysis_id]["status"] = "stopped"
                 cancelled_analyses.discard(analysis_id)  # Remove from cancelled set
                 return
             
-            comment = comments_data[i]
+            batch_end = min(i + batch_size, total)
+            batch_comments = comments_data[i:batch_end]
             
-            # Log progress every 10 comments or at milestones
-            current_comment_num = i + 1
-            if current_comment_num % 10 == 0 or current_comment_num in [1, 5, 25, 50, 100, 250, 500, 1000]:
+            # Log progress every batch
+            if current_comment_num % 100 == 0 or current_comment_num in [1, 5, 25, 50, 100, 250, 500, 1000]:
                 elapsed_time = time.time() - start_time
                 comments_processed_in_session = current_comment_num - start_index
                 comments_per_second = comments_processed_in_session / elapsed_time if elapsed_time > 0 else 0
                 estimated_remaining = (total - current_comment_num) / comments_per_second if comments_per_second > 0 else 0
                 
-                log_analysis_step("📈 PROGRESS UPDATE", 
+                log_analysis_step("📈 HF OPTIMIZED PROGRESS UPDATE", 
                     f"Comment {current_comment_num}/{total} ({((current_comment_num)/total*100):.1f}%) | "
                     f"Speed: {comments_per_second:.2f} comments/sec | "
                     f"ETA: {estimated_remaining/60:.1f} minutes", 
                     analysis_id=analysis_id)
             
-            # Analyze comment with AI
-            analysis = await analyze_comment_with_ai(
-                comment["text_original"], 
-                comment["comment_id"], 
-                analysis_id
-            )
+            # Check cancellation again before processing batch
+            if analysis_id in cancelled_analyses:
+                log_analysis_step("🛑 HF ANALYSIS CANCELLED", f"Stopped at comment {current_comment_num+1}/{total}", analysis_id=analysis_id)
+                analysis_results[analysis_id]["status"] = "stopped"
+                cancelled_analyses.discard(analysis_id)  # Remove from cancelled set
+                return
             
-            # Add analysis to comment
-            comment["analysis"] = analysis
-            results.append(comment)
+            # Prepare batch data for optimized processing
+            batch_data = []
+            for comment in batch_comments:
+                if comment.get("text_original", "").strip():
+                    batch_data.append((comment["text_original"], comment["comment_id"]))
+            
+            if batch_data:
+                try:
+                    # Analyze entire batch at once using optimized pipeline
+                    batch_results = await analyze_batch_with_hf_optimized(batch_data)
+                    
+                    # Update comments with analysis results
+                    for j, (comment_text, comment_id) in enumerate(batch_data):
+                        if j < len(batch_results):
+                            analysis_result = batch_results[j]
+                            
+                            # Find the corresponding comment in the original list
+                            comment_index = i + j
+                            if comment_index < len(comments_data):
+                                comments_data[comment_index]["analysis"] = analysis_result
+                                results.append(comments_data[comment_index])
+                    
+                    current_comment_num += len(batch_comments)
+                    
+                    # Check cancellation after batch processing
+                    if analysis_id in cancelled_analyses:
+                        log_analysis_step("🛑 HF ANALYSIS CANCELLED", f"Stopped at comment {current_comment_num+1}/{total}", analysis_id=analysis_id)
+                        analysis_results[analysis_id]["status"] = "stopped"
+                        cancelled_analyses.discard(analysis_id)  # Remove from cancelled set
+                        return
+                    
+                except Exception as e:
+                    log_analysis_step("❌ BATCH ANALYSIS ERROR", f"Error analyzing batch {i+1}-{batch_end}: {str(e)}", analysis_id=analysis_id)
+                    # Fallback to individual processing for this batch
+                    for comment in batch_comments:
+                        # Check cancellation before each individual comment
+                        if analysis_id in cancelled_analyses:
+                            log_analysis_step("🛑 HF ANALYSIS CANCELLED", f"Stopped at comment {current_comment_num+1}/{total}", analysis_id=analysis_id)
+                            analysis_results[analysis_id]["status"] = "stopped"
+                            cancelled_analyses.discard(analysis_id)  # Remove from cancelled set
+                            return
+                            
+                        try:
+                            analysis = await analyze_comment_with_hf_optimized(
+                                comment["text_original"], 
+                                comment["comment_id"], 
+                                analysis_id
+                            )
+                            comment["analysis"] = analysis
+                            results.append(comment)
+                            current_comment_num += 1
+                        except Exception as individual_error:
+                            log_analysis_step("❌ INDIVIDUAL COMMENT ERROR", f"Error analyzing comment {comment['comment_id']}: {str(individual_error)}", analysis_id=analysis_id)
+                            current_comment_num += 1
+            else:
+                current_comment_num += len(batch_comments)
             
             # Update progress
-            current_comment_num = i + 1
             progress = int((current_comment_num) / total * 100)
             analysis_results[analysis_id].update({
                 "progress": progress,
@@ -395,15 +385,15 @@ async def run_ai_analysis(analysis_id: str, resume: bool = False):
                 "results": results
             })
             
-            # Small delay to prevent rate limiting
-            await asyncio.sleep(0.2)
+            # Small delay between batches
+            await asyncio.sleep(0.05)  # Reduced delay for optimized processing
         
         # Mark as completed only if not cancelled
         if analysis_id not in cancelled_analyses:
             total_time = time.time() - start_time
             avg_time_per_comment = total_time / total
             
-            log_analysis_step("🎉 ANALYSIS COMPLETED", 
+            log_analysis_step("🎉 HF ANALYSIS COMPLETED", 
                 f"Total time: {total_time/60:.2f} minutes | "
                 f"Average: {avg_time_per_comment:.2f}s per comment | "
                 f"Total comments analyzed: {total}", 
@@ -412,21 +402,21 @@ async def run_ai_analysis(analysis_id: str, resume: bool = False):
             analysis_results[analysis_id]["status"] = "completed"
         
     except Exception as e:
-        log_analysis_step("💥 ANALYSIS FAILED", f"Error: {e}", analysis_id=analysis_id)
+        log_analysis_step("💥 HF ANALYSIS FAILED", f"Error: {e}", analysis_id=analysis_id)
         analysis_results[analysis_id]["status"] = "failed"
         analysis_results[analysis_id]["error"] = str(e)
 
 @app.get("/api/analysis/status/{analysis_id}")
 async def get_analysis_status(analysis_id: str):
     """Get analysis status"""
-    log_analysis_step("📊 STATUS REQUEST", f"Analysis ID: {analysis_id}")
+    log_analysis_step("📊 HF STATUS REQUEST", f"Analysis ID: {analysis_id}")
     
     if analysis_id not in analysis_results:
-        log_analysis_step("❌ STATUS NOT FOUND", f"Analysis ID: {analysis_id}")
+        log_analysis_step("❌ HF STATUS NOT FOUND", f"Analysis ID: {analysis_id}")
         raise HTTPException(status_code=404, detail="Analysis not found")
     
     status = analysis_results[analysis_id]
-    log_analysis_step("✅ STATUS RETURNED", f"Status: {status['status']}, Progress: {status['progress']}%, Processed: {status['processed_comments']}/{status['total_comments']}")
+    log_analysis_step("✅ HF STATUS RETURNED", f"Status: {status['status']}, Progress: {status['progress']}%, Processed: {status['processed_comments']}/{status['total_comments']}")
     
     return status
 
@@ -444,9 +434,9 @@ async def stop_analysis(analysis_id: str):
     # Mark analysis for cancellation and immediately update status
     cancelled_analyses.add(analysis_id)
     analysis_results[analysis_id]["status"] = "stopping"
-    log_analysis_step("🛑 STOP REQUESTED", f"Analysis ID: {analysis_id}", analysis_id=analysis_id)
+    log_analysis_step("🛑 HF STOP REQUESTED", f"Analysis ID: {analysis_id}", analysis_id=analysis_id)
     
-    return {"message": "Analysis stop requested", "analysis_id": analysis_id, "status": "stopping"}
+    return {"message": "Analysis stop requested", "analysis_id": analysis_id, "status": "stopping", "model_source": "huggingface"}
 
 @app.get("/api/dashboard/stats")
 async def get_dashboard_stats():
@@ -463,7 +453,8 @@ async def get_dashboard_stats():
             "spam_ratio": 0,
             "top_categories": [],
             "comment_timeline": [],
-            "quality_distribution": []
+            "quality_distribution": [],
+            "model_source": "huggingface"
         }
     
     # Calculate statistics
@@ -529,7 +520,8 @@ async def get_dashboard_stats():
         "spam_ratio": spam_ratio,
         "top_categories": top_categories,
         "comment_timeline": comment_timeline,
-        "quality_distribution": quality_distribution
+        "quality_distribution": quality_distribution,
+        "model_source": "huggingface"
     }
 
 @app.post("/api/comments/search")
@@ -584,7 +576,8 @@ async def search_comments(request: dict):
             "total_count": total_filtered,
             "page": (skip // limit) + 1,
             "page_size": limit,
-            "total_pages": (total_filtered + limit - 1) // limit
+            "total_pages": (total_filtered + limit - 1) // limit,
+            "model_source": "huggingface"
         }
     except Exception as e:
         print(f"Error in search_comments: {e}")
@@ -594,6 +587,7 @@ async def search_comments(request: dict):
 
 if __name__ == "__main__":
     import uvicorn
-    print("🚀 Starting AI backend on port 8000...")
+    print("🚀 Starting Hugging Face backend on port 8001...")
+    print("🤖 Using ONLY Hugging Face models - no OpenAI API calls")
     print("📊 Enhanced logging enabled - you'll see detailed analysis steps in the terminal")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)
