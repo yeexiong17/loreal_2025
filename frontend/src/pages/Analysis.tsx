@@ -15,6 +15,7 @@ import {
   ListItemText,
   ListItemIcon,
   Divider,
+  Avatar,
 } from '@mui/material';
 import {
   PlayArrow as StartIcon,
@@ -22,6 +23,8 @@ import {
   CheckCircle as CompleteIcon,
   Error as ErrorIcon,
   Refresh as RefreshIcon,
+  Analytics as AnalyticsIcon,
+  Comment as CommentIcon,
 } from '@mui/icons-material';
 import { useAnalysis } from '../contexts/AnalysisContext';
 
@@ -97,100 +100,177 @@ const Analysis: React.FC = () => {
   };
 
   return (
-    <Box>
-      <Typography variant="h4" gutterBottom>
-        Comment Analysis
-      </Typography>
+    <Box sx={{ animation: 'fadeIn 0.6s ease-out' }}>
+      {/* Header Section */}
+      <Box sx={{ mb: 4 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h3" sx={{ fontWeight: 700, color: 'text.primary' }}>
+            AI Comment Analysis
+          </Typography>
 
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={8}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Run Analysis
-            </Typography>
-
-            <Typography variant="body1" paragraph>
-              Start the AI-powered analysis of your comments. This will perform:
-            </Typography>
-
-            <List dense>
-              <ListItem>
-                <ListItemText primary="Quality Scoring" secondary="Analyze comment quality based on length, readability, and engagement" />
-              </ListItem>
-              <ListItem>
-                <ListItemText primary="Sentiment Analysis" secondary="Determine if comments are positive, negative, or neutral" />
-              </ListItem>
-              <ListItem>
-                <ListItemText primary="Categorization" secondary="Classify comments into beauty categories (skincare, makeup, etc.)" />
-              </ListItem>
-              <ListItem>
-                <ListItemText primary="Spam Detection" secondary="Identify and flag spam comments" />
-              </ListItem>
-            </List>
-
-            <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
-              {canResume ? (
-                <Button
-                  variant="contained"
-                  onClick={handleResumeAnalysis}
-                  disabled={loading || isAnalysisRunning}
-                  startIcon={<StartIcon />}
-                  size="large"
-                  color="secondary"
-                >
-                  {loading ? 'Resuming...' : 'Resume Analysis'}
-                </Button>
-              ) : (
-                <Button
-                  variant="contained"
-                  onClick={handleStartAnalysis}
-                  disabled={loading || isAnalysisRunning}
-                  startIcon={<StartIcon />}
-                  size="large"
-                >
-                  {loading ? 'Starting...' : 'Start Analysis'}
-                </Button>
-              )}
-
-              {isAnalysisRunning && (
-                <Button
-                  variant="outlined"
-                  color="error"
-                  onClick={handleStopAnalysis}
-                  startIcon={<StopIcon />}
-                  size="large"
-                  disabled={loading}
-                >
-                  {loading ? 'Stopping...' : 'Stop Analysis'}
-                </Button>
-              )}
-
-              {analysisStatus && !isAnalysisRunning && (
-                <Button
-                  variant="outlined"
-                  onClick={refreshStatus}
-                  startIcon={<RefreshIcon />}
-                  size="large"
-                >
-                  Refresh Status
-                </Button>
-              )}
-
-              {analysisStatus && (
-                <Button
-                  variant="outlined"
-                  color="secondary"
-                  onClick={clearAnalysis}
-                  size="large"
-                >
-                  Clear Analysis
-                </Button>
-              )}
-            </Box>
-
+          {/* Compact Status Bar */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             {error && (
+              <Chip
+                icon={<ErrorIcon />}
+                label="Connection Error"
+                color="error"
+                variant="outlined"
+                sx={{ fontWeight: 500 }}
+              />
+            )}
+          </Box>
+        </Box>
+      </Box>
+
+      {/* Analysis Status - Always Visible */}
+      <Paper
+        sx={{
+          p: 3,
+          mb: 3,
+          '&:hover': {
+            boxShadow: '0px 10px 15px rgba(0, 0, 0, 0.1), 0px 4px 6px rgba(0, 0, 0, 0.05)',
+          },
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <Avatar sx={{ bgcolor: 'info.main', mr: 2, width: 40, height: 40 }}>
+            <AnalyticsIcon />
+          </Avatar>
+          <Box sx={{ flexGrow: 1 }}>
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              Analysis Status
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {analysisStatus ? 'Real-time progress tracking' : 'Ready to start analysis'}
+            </Typography>
+          </Box>
+          {analysisStatus && (
+            <Chip
+              icon={getStatusIcon(analysisStatus.status)}
+              label={analysisStatus.status.toUpperCase()}
+              color={getStatusColor(analysisStatus.status) as any}
+              sx={{
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                height: 32,
+              }}
+            />
+          )}
+        </Box>
+
+        {analysisStatus ? (
+          <>
+            <Grid container spacing={3} alignItems="center">
+              <Grid item xs={12} md={6}>
+                <Typography variant="body2" color="textSecondary" sx={{ fontWeight: 500, mb: 1 }}>
+                  {analysisStatus.processed_comments.toLocaleString()} / {analysisStatus.total_comments.toLocaleString()} comments processed
+                </Typography>
+                {analysisStatus.status === 'processing' && (
+                  <LinearProgress
+                    variant="determinate"
+                    value={analysisStatus.progress}
+                    sx={{
+                      height: 8,
+                      borderRadius: 4,
+                      bgcolor: 'grey.200',
+                      '& .MuiLinearProgress-bar': {
+                        borderRadius: 4,
+                      },
+                    }}
+                  />
+                )}
+                {analysisStatus.status !== 'processing' && (
+                  <Typography variant="h6" color="text.primary" sx={{ fontWeight: 600 }}>
+                    {analysisStatus.progress.toFixed(1)}% Complete
+                  </Typography>
+                )}
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: { xs: 'flex-start', md: 'flex-end' } }}>
+                  {canResume && (
+                    <Button
+                      variant="contained"
+                      onClick={handleResumeAnalysis}
+                      disabled={loading || isAnalysisRunning}
+                      startIcon={<StartIcon />}
+                      size="large"
+                      sx={{
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        px: 3,
+                        py: 1.5,
+                        fontSize: '0.875rem',
+                        fontWeight: 600,
+                        '&:hover': {
+                          background: 'linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%)',
+                          transform: 'translateY(-2px)',
+                        },
+                      }}
+                    >
+                      {loading ? 'Resuming...' : 'Resume Analysis'}
+                    </Button>
+                  )}
+                  {isAnalysisRunning && (
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      onClick={handleStopAnalysis}
+                      startIcon={<StopIcon />}
+                      size="small"
+                      disabled={loading}
+                      sx={{
+                        borderWidth: 2,
+                        '&:hover': { borderWidth: 2 },
+                      }}
+                    >
+                      {loading ? 'Stopping...' : 'Stop'}
+                    </Button>
+                  )}
+                  {analysisStatus && !isAnalysisRunning && (
+                    <Button
+                      variant="outlined"
+                      onClick={refreshStatus}
+                      startIcon={<RefreshIcon />}
+                      size="small"
+                      sx={{
+                        borderWidth: 2,
+                        '&:hover': { borderWidth: 2 },
+                      }}
+                    >
+                      Refresh
+                    </Button>
+                  )}
+                  {analysisStatus && (
+                    <Button
+                      variant="outlined"
+                      color="secondary"
+                      onClick={clearAnalysis}
+                      size="small"
+                      sx={{
+                        borderWidth: 2,
+                        '&:hover': { borderWidth: 2 },
+                      }}
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </Box>
+              </Grid>
+            </Grid>
+
+            {analysisStatus.error_message && (
               <Alert severity="error" sx={{ mt: 2 }}>
-                {error}
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  {analysisStatus.error_message}
+                </Typography>
+              </Alert>
+            )}
+
+            {analysisStatus.status === 'completed' && (
+              <Alert severity="success" sx={{ mt: 2 }}>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  Analysis completed successfully! View results in Comments and Dashboard sections.
+                </Typography>
               </Alert>
             )}
 
@@ -203,135 +283,198 @@ const Analysis: React.FC = () => {
 
             {canResume && (
               <Alert severity="warning" sx={{ mt: 2 }}>
-                Analysis was stopped at {analysisStatus?.processed_comments} out of {analysisStatus?.total_comments} comments. 
+                Analysis was stopped at {analysisStatus?.processed_comments} out of {analysisStatus?.total_comments} comments.
                 Click "Resume Analysis" to continue from where it left off.
               </Alert>
             )}
-          </Paper>
-
-          {analysisStatus && (
-            <Paper sx={{ p: 3, mt: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Analysis Status
+          </>
+        ) : (
+          <Grid container spacing={3} alignItems="center">
+            <Grid item xs={12} md={6}>
+              <Typography variant="body2" color="textSecondary" sx={{ fontWeight: 500 }}>
+                No analysis has been started yet. Click "Start Analysis" to begin processing your comments.
               </Typography>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: { xs: 'flex-start', md: 'flex-end' } }}>
+                <Button
+                  variant="contained"
+                  onClick={handleStartAnalysis}
+                  disabled={loading || isAnalysisRunning}
+                  startIcon={<StartIcon />}
+                  size="large"
+                  sx={{
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    px: 3,
+                    py: 1.5,
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    '&:hover': {
+                      background: 'linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%)',
+                      transform: 'translateY(-2px)',
+                    },
+                  }}
+                >
+                  {loading ? 'Starting...' : 'Start Analysis'}
+                </Button>
+              </Box>
+            </Grid>
+          </Grid>
+        )}
+      </Paper>
 
-              <Box sx={{ mb: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <Chip
-                    icon={getStatusIcon(analysisStatus.status)}
-                    label={analysisStatus.status.toUpperCase()}
-                    color={getStatusColor(analysisStatus.status) as any}
-                    sx={{ mr: 2 }}
-                  />
-                  <Typography variant="body2" color="textSecondary">
-                    {analysisStatus.processed_comments} / {analysisStatus.total_comments} comments processed
-                  </Typography>
-                </Box>
-
-                {analysisStatus.status === 'processing' && (
-                  <LinearProgress
-                    variant="determinate"
-                    value={analysisStatus.progress}
-                    sx={{ mb: 1 }}
-                  />
-                )}
-
-                <Typography variant="body2" color="textSecondary">
-                  Progress: {analysisStatus.progress.toFixed(1)}%
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={8}>
+          <Paper
+            sx={{
+              p: 3,
+              '&:hover': {
+                boxShadow: '0px 10px 15px rgba(0, 0, 0, 0.1), 0px 4px 6px rgba(0, 0, 0, 0.05)',
+              },
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+              <Avatar sx={{ bgcolor: 'primary.main', mr: 2, width: 40, height: 40 }}>
+                <StartIcon />
+              </Avatar>
+              <Box>
+                <Typography variant="h5" sx={{ fontWeight: 600 }}>
+                  Start Analysis
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Run comprehensive AI analysis on your comment dataset
                 </Typography>
               </Box>
+            </Box>
 
-              {analysisStatus.error_message && (
-                <Alert severity="error">
-                  {analysisStatus.error_message}
-                </Alert>
-              )}
+            <Grid container spacing={2} sx={{ mb: 3 }}>
+              <Grid item xs={12} sm={6}>
+                <Box sx={{ display: 'flex', alignItems: 'center', p: 2, borderRadius: 2, bgcolor: 'grey.50' }}>
+                  <Avatar sx={{ bgcolor: 'success.main', mr: 2, width: 32, height: 32 }}>
+                    <CompleteIcon />
+                  </Avatar>
+                  <Box>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                      Quality Scoring
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Analyze comment quality and engagement
+                    </Typography>
+                  </Box>
+                </Box>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Box sx={{ display: 'flex', alignItems: 'center', p: 2, borderRadius: 2, bgcolor: 'grey.50' }}>
+                  <Avatar sx={{ bgcolor: 'info.main', mr: 2, width: 32, height: 32 }}>
+                    <AnalyticsIcon />
+                  </Avatar>
+                  <Box>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                      Sentiment Analysis
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Determine positive, negative, or neutral sentiment
+                    </Typography>
+                  </Box>
+                </Box>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Box sx={{ display: 'flex', alignItems: 'center', p: 2, borderRadius: 2, bgcolor: 'grey.50' }}>
+                  <Avatar sx={{ bgcolor: 'warning.main', mr: 2, width: 32, height: 32 }}>
+                    <CommentIcon />
+                  </Avatar>
+                  <Box>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                      Categorization
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Classify into beauty categories
+                    </Typography>
+                  </Box>
+                </Box>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Box sx={{ display: 'flex', alignItems: 'center', p: 2, borderRadius: 2, bgcolor: 'grey.50' }}>
+                  <Avatar sx={{ bgcolor: 'error.main', mr: 2, width: 32, height: 32 }}>
+                    <ErrorIcon />
+                  </Avatar>
+                  <Box>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                      Spam Detection
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Identify and flag spam comments
+                    </Typography>
+                  </Box>
+                </Box>
+              </Grid>
+            </Grid>
 
-              {analysisStatus.status === 'completed' && (
-                <Alert severity="success">
-                  Analysis completed successfully! You can now view the results in the Comments and Dashboard sections.
-                </Alert>
-              )}
-            </Paper>
-          )}
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+              Use the action buttons in the Analysis Status section above to start, resume, or control your analysis.
+            </Typography>
+          </Paper>
         </Grid>
 
         <Grid item xs={12} md={4}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Analysis Features
-              </Typography>
-
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Quality Scoring
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  Evaluates comment quality based on length, readability, engagement, and content quality.
-                </Typography>
-              </Box>
-
-              <Divider sx={{ my: 2 }} />
-
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Sentiment Analysis
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  Uses OpenAI GPT to analyze sentiment with beauty/skincare context awareness.
+          <Card
+            sx={{
+              mb: 3,
+              '&:hover': {
+                boxShadow: '0px 10px 15px rgba(0, 0, 0, 0.1), 0px 4px 6px rgba(0, 0, 0, 0.05)',
+              },
+            }}
+          >
+            <CardContent sx={{ p: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                <Avatar sx={{ bgcolor: 'secondary.main', mr: 2, width: 40, height: 40 }}>
+                  <RefreshIcon />
+                </Avatar>
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  Processing Time
                 </Typography>
               </Box>
-
-              <Divider sx={{ my: 2 }} />
-
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Categorization
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  Automatically categorizes comments into skincare, makeup, fragrance, and haircare.
-                </Typography>
-              </Box>
-
-              <Divider sx={{ my: 2 }} />
-
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  Spam Detection
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  Machine learning model to identify and filter out spam comments.
-                </Typography>
-              </Box>
-            </CardContent>
-          </Card>
-
-          <Card sx={{ mt: 2 }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Processing Time
-              </Typography>
-              <Typography variant="body2" color="textSecondary">
-                Analysis time depends on the number of comments:
-              </Typography>
               <List dense>
-                <ListItem>
+                <ListItem sx={{ px: 0 }}>
+                  <ListItemIcon>
+                    <Avatar sx={{ bgcolor: 'success.main', width: 32, height: 32 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'white' }}>
+                        1K
+                      </Typography>
+                    </Avatar>
+                  </ListItemIcon>
                   <ListItemText
                     primary="1,000 comments"
                     secondary="~2-3 minutes"
+                    primaryTypographyProps={{ fontWeight: 500 }}
                   />
                 </ListItem>
-                <ListItem>
+                <ListItem sx={{ px: 0 }}>
+                  <ListItemIcon>
+                    <Avatar sx={{ bgcolor: 'warning.main', width: 32, height: 32 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'white' }}>
+                        10K
+                      </Typography>
+                    </Avatar>
+                  </ListItemIcon>
                   <ListItemText
                     primary="10,000 comments"
                     secondary="~15-20 minutes"
+                    primaryTypographyProps={{ fontWeight: 500 }}
                   />
                 </ListItem>
-                <ListItem>
+                <ListItem sx={{ px: 0 }}>
+                  <ListItemIcon>
+                    <Avatar sx={{ bgcolor: 'error.main', width: 32, height: 32 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'white' }}>
+                        100K+
+                      </Typography>
+                    </Avatar>
+                  </ListItemIcon>
                   <ListItemText
                     primary="100,000+ comments"
                     secondary="~2-3 hours"
+                    primaryTypographyProps={{ fontWeight: 500 }}
                   />
                 </ListItem>
               </List>

@@ -91,10 +91,10 @@ const Configuration: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       // In a real app, this would save to the backend
       // await apiService.saveConfiguration({ config, keywords });
-      
+
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err: any) {
@@ -130,10 +130,6 @@ const Configuration: React.FC = () => {
         Model Configuration
       </Typography>
 
-      <Typography variant="body1" color="textSecondary" paragraph>
-        Configure the analysis models and parameters to customize how comments are processed and categorized.
-      </Typography>
-
       {saved && (
         <Alert severity="success" sx={{ mb: 3 }}>
           Configuration saved successfully!
@@ -153,7 +149,7 @@ const Configuration: React.FC = () => {
             <Typography variant="h6" gutterBottom>
               Analysis Parameters
             </Typography>
-            
+
             <Grid container spacing={2}>
               <Grid item xs={12}>
                 <TextField
@@ -166,7 +162,7 @@ const Configuration: React.FC = () => {
                   helperText="Minimum quality score (0-1) for a comment to be considered high quality"
                 />
               </Grid>
-              
+
               <Grid item xs={12}>
                 <TextField
                   fullWidth
@@ -178,7 +174,7 @@ const Configuration: React.FC = () => {
                   helperText="Minimum confidence (0-1) for sentiment analysis results"
                 />
               </Grid>
-              
+
               <Grid item xs={12}>
                 <TextField
                   fullWidth
@@ -190,7 +186,7 @@ const Configuration: React.FC = () => {
                   helperText="Threshold (0-1) above which comments are flagged as spam"
                 />
               </Grid>
-              
+
               <Grid item xs={6}>
                 <TextField
                   fullWidth
@@ -202,7 +198,7 @@ const Configuration: React.FC = () => {
                   helperText="Minimum characters"
                 />
               </Grid>
-              
+
               <Grid item xs={6}>
                 <TextField
                   fullWidth
@@ -234,7 +230,7 @@ const Configuration: React.FC = () => {
                 Add Keyword
               </Button>
             </Box>
-            
+
             <Typography variant="body2" color="textSecondary" paragraph>
               Define keywords that help categorize comments into beauty categories.
             </Typography>
