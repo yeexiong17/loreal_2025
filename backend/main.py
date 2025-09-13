@@ -458,52 +458,62 @@ async def get_dashboard_stats():
 @app.post("/api/comments/search")
 async def search_comments(request: dict):
     """Search comments with filters"""
-    query = request.get("query", "")
-    filters = request.get("filters", {})
-    skip = request.get("skip", 0)
-    limit = request.get("limit", 10)
-    
-    print(f"Search request: query='{query}', filters={filters}, skip={skip}, limit={limit}")
-    print(f"Total comments available: {len(comments_data)}")
-    
-    # Apply filters to comments
-    filtered_comments = []
-    
-    for comment in comments_data:
-        # Text search filter
-        if query and query.lower() not in comment.get("text_original", "").lower():
-            continue
-            
-        # Sentiment filter
-        if filters.get("sentiment") and comment.get("analysis", {}).get("sentiment") != filters["sentiment"]:
-            continue
-            
-        # Category filter
-        if filters.get("category") and comment.get("analysis", {}).get("category") != filters["category"]:
-            continue
-            
-        # Spam filter
-        if filters.get("is_spam") != "":
-            is_spam = comment.get("analysis", {}).get("is_spam", False)
-            filter_spam = filters["is_spam"] == "true"
-            if is_spam != filter_spam:
+    try:
+        query = request.get("query", "")
+        filters = request.get("filters", {})
+        skip = request.get("skip", 0)
+        limit = request.get("limit", 10)
+        
+        print(f"Search request: query='{query}', filters={filters}, skip={skip}, limit={limit}")
+        print(f"Total comments available: {len(comments_data)}")
+        
+        # Apply filters to comments
+        filtered_comments = []
+        
+        for comment in comments_data:
+            try:
+                # Text search filter
+                if query and query.lower() not in comment.get("text_original", "").lower():
+                    continue
+                    
+                # Sentiment filter - only apply if analysis exists
+                if filters.get("sentiment") and comment.get("analysis") and comment.get("analysis", {}).get("sentiment") != filters["sentiment"]:
+                    continue
+                    
+                # Category filter - only apply if analysis exists
+                if filters.get("category") and comment.get("analysis") and comment.get("analysis", {}).get("category") != filters["category"]:
+                    continue
+                    
+                # Spam filter - only apply if analysis exists
+                if filters.get("is_spam") != "" and comment.get("analysis"):
+                    is_spam = comment.get("analysis", {}).get("is_spam", False)
+                    filter_spam = filters["is_spam"] == "true"
+                    if is_spam != filter_spam:
+                        continue
+                
+                filtered_comments.append(comment)
+            except Exception as e:
+                print(f"Error processing comment: {e}")
                 continue
         
-        filtered_comments.append(comment)
-    
-    # Apply pagination
-    total_filtered = len(filtered_comments)
-    paginated_comments = filtered_comments[skip:skip + limit]
-    
-    print(f"Filtered results: {total_filtered} total, returning {len(paginated_comments)} comments")
-    
-    return {
-        "comments": paginated_comments,
-        "total_count": total_filtered,
-        "page": (skip // limit) + 1,
-        "page_size": limit,
-        "total_pages": (total_filtered + limit - 1) // limit
-    }
+        # Apply pagination
+        total_filtered = len(filtered_comments)
+        paginated_comments = filtered_comments[skip:skip + limit]
+        
+        print(f"Filtered results: {total_filtered} total, returning {len(paginated_comments)} comments")
+        
+        return {
+            "comments": paginated_comments,
+            "total_count": total_filtered,
+            "page": (skip // limit) + 1,
+            "page_size": limit,
+            "total_pages": (total_filtered + limit - 1) // limit
+        }
+    except Exception as e:
+        print(f"Error in search_comments: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

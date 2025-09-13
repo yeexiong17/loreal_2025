@@ -316,7 +316,19 @@ const Comments: React.FC = () => {
             Refresh
           </Button>
         </Box>
-        
+
+        {/* Analysis Status Note */}
+        {comments.length > 0 && (
+          <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+            <Alert severity="info" sx={{ mb: 0 }}>
+              <Typography variant="body2">
+                <strong>Note:</strong> Comments without analysis data (empty sentiment, category, quality, and spam fields)
+                have not been processed by AI yet. Run the analysis from the Analysis page to get complete insights.
+              </Typography>
+            </Alert>
+          </Box>
+        )}
+
         <TableContainer>
           <Table>
             <TableHead>
@@ -345,53 +357,53 @@ const Comments: React.FC = () => {
                 </TableRow>
               ) : (
                 comments.map((comment) => (
-                <TableRow key={comment.comment_id}>
-                  <TableCell>
-                    <Typography variant="body2" sx={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {comment.text_original || 'No text'}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    {comment.analysis?.sentiment && (
-                      <Chip
-                        label={comment.analysis.sentiment}
-                        color={getSentimentColor(comment.analysis.sentiment) as any}
-                        size="small"
-                      />
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {comment.analysis?.category && (
-                      <Chip
-                        label={comment.analysis.category}
-                        color={getCategoryColor(comment.analysis.category) as any}
-                        size="small"
-                      />
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {comment.analysis?.quality_score && (
-                      <Typography variant="body2">
-                        {(comment.analysis.quality_score * 100).toFixed(1)}%
+                  <TableRow key={comment.comment_id}>
+                    <TableCell>
+                      <Typography variant="body2" sx={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {comment.text_original || 'No text'}
                       </Typography>
-                    )}
-                  </TableCell>
-                  <TableCell>{comment.like_count}</TableCell>
-                  <TableCell>
-                    {new Date(comment.published_at).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell>
-                    {comment.analysis?.is_spam && (
-                      <Chip label="Spam" color="error" size="small" />
-                    )}
-                  </TableCell>
-                </TableRow>
+                    </TableCell>
+                    <TableCell>
+                      {comment.analysis?.sentiment && (
+                        <Chip
+                          label={comment.analysis.sentiment}
+                          color={getSentimentColor(comment.analysis.sentiment) as any}
+                          size="small"
+                        />
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {comment.analysis?.category && (
+                        <Chip
+                          label={comment.analysis.category}
+                          color={getCategoryColor(comment.analysis.category) as any}
+                          size="small"
+                        />
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {comment.analysis?.quality_score && (
+                        <Typography variant="body2">
+                          {(comment.analysis.quality_score * 100).toFixed(1)}%
+                        </Typography>
+                      )}
+                    </TableCell>
+                    <TableCell>{comment.like_count}</TableCell>
+                    <TableCell>
+                      {new Date(comment.published_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>
+                      {comment.analysis?.is_spam && (
+                        <Chip label="Spam" color="error" size="small" />
+                      )}
+                    </TableCell>
+                  </TableRow>
                 ))
               )}
             </TableBody>
           </Table>
         </TableContainer>
-        
+
         {/* Pagination */}
         <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
           <Pagination
