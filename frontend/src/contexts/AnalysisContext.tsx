@@ -40,7 +40,7 @@ export const AnalysisProvider: React.FC<AnalysisProviderProps> = ({ children }) 
       const result = await apiService.startAnalysis({
         analysis_types: ['quality', 'sentiment', 'categorization', 'spam']
       });
-      
+
       if (result.analysis_id) {
         const newStatus = {
           analysis_id: result.analysis_id,
@@ -51,7 +51,7 @@ export const AnalysisProvider: React.FC<AnalysisProviderProps> = ({ children }) 
         };
         setAnalysisStatus(newStatus);
         localStorage.setItem('analysisStatus', JSON.stringify(newStatus));
-        
+
         // Start polling for status updates
         startPolling(result.analysis_id);
       }
@@ -66,12 +66,12 @@ export const AnalysisProvider: React.FC<AnalysisProviderProps> = ({ children }) 
       clearInterval(pollingInterval);
       setPollingInterval(null);
     }
-    
+
     if (analysisStatus?.status === 'processing' && analysisStatus.analysis_id) {
       try {
         // Call backend to stop the analysis
         await apiService.stopAnalysis(analysisStatus.analysis_id);
-        
+
         // Update local status
         const stoppedStatus = { ...analysisStatus, status: 'stopped' as const };
         setAnalysisStatus(stoppedStatus);
@@ -92,7 +92,7 @@ export const AnalysisProvider: React.FC<AnalysisProviderProps> = ({ children }) 
         const status = await apiService.getAnalysisStatus(analysisId);
         setAnalysisStatus(status);
         localStorage.setItem('analysisStatus', JSON.stringify(status));
-        
+
         if (status.status === 'completed' || status.status === 'failed') {
           clearInterval(interval);
           setPollingInterval(null);
@@ -103,7 +103,7 @@ export const AnalysisProvider: React.FC<AnalysisProviderProps> = ({ children }) 
         setPollingInterval(null);
       }
     }, 2000); // Poll every 2 seconds
-    
+
     setPollingInterval(interval);
   };
 

@@ -93,11 +93,11 @@ const Analysis: React.FC = () => {
             <Typography variant="h6" gutterBottom>
               Run Analysis
             </Typography>
-            
+
             <Typography variant="body1" paragraph>
               Start the AI-powered analysis of your comments. This will perform:
             </Typography>
-            
+
             <List dense>
               <ListItem>
                 <ListItemText primary="Quality Scoring" secondary="Analyze comment quality based on length, readability, and engagement" />
@@ -123,7 +123,7 @@ const Analysis: React.FC = () => {
               >
                 {loading ? 'Starting...' : 'Start Analysis'}
               </Button>
-              
+
               {isAnalysisRunning && (
                 <Button
                   variant="outlined"
@@ -136,7 +136,7 @@ const Analysis: React.FC = () => {
                   {loading ? 'Stopping...' : 'Stop Analysis'}
                 </Button>
               )}
-              
+
               {analysisStatus && !isAnalysisRunning && (
                 <Button
                   variant="outlined"
@@ -147,7 +147,7 @@ const Analysis: React.FC = () => {
                   Refresh Status
                 </Button>
               )}
-              
+
               {analysisStatus && (
                 <Button
                   variant="outlined"
@@ -160,17 +160,17 @@ const Analysis: React.FC = () => {
               )}
             </Box>
 
-      {error && (
-        <Alert severity="error" sx={{ mt: 2 }}>
-          {error}
-        </Alert>
-      )}
+            {error && (
+              <Alert severity="error" sx={{ mt: 2 }}>
+                {error}
+              </Alert>
+            )}
 
-      {recovered && analysisStatus && (
-        <Alert severity="info" sx={{ mt: 2 }}>
-          Analysis state recovered from previous session. Current status: {analysisStatus.status}
-        </Alert>
-      )}
+            {recovered && analysisStatus && (
+              <Alert severity="info" sx={{ mt: 2 }}>
+                Analysis state recovered from previous session. Current status: {analysisStatus.status}
+              </Alert>
+            )}
           </Paper>
 
           {analysisStatus && (
@@ -178,7 +178,7 @@ const Analysis: React.FC = () => {
               <Typography variant="h6" gutterBottom>
                 Analysis Status
               </Typography>
-              
+
               <Box sx={{ mb: 2 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                   <Chip
@@ -191,15 +191,15 @@ const Analysis: React.FC = () => {
                     {analysisStatus.processed_comments} / {analysisStatus.total_comments} comments processed
                   </Typography>
                 </Box>
-                
+
                 {analysisStatus.status === 'processing' && (
-                  <LinearProgress 
-                    variant="determinate" 
-                    value={analysisStatus.progress} 
+                  <LinearProgress
+                    variant="determinate"
+                    value={analysisStatus.progress}
                     sx={{ mb: 1 }}
                   />
                 )}
-                
+
                 <Typography variant="body2" color="textSecondary">
                   Progress: {analysisStatus.progress.toFixed(1)}%
                 </Typography>
@@ -226,7 +226,7 @@ const Analysis: React.FC = () => {
               <Typography variant="h6" gutterBottom>
                 Analysis Features
               </Typography>
-              
+
               <Box sx={{ mb: 2 }}>
                 <Typography variant="subtitle2" gutterBottom>
                   Quality Scoring
@@ -281,21 +281,21 @@ const Analysis: React.FC = () => {
               </Typography>
               <List dense>
                 <ListItem>
-                  <ListItemText 
-                    primary="1,000 comments" 
-                    secondary="~2-3 minutes" 
+                  <ListItemText
+                    primary="1,000 comments"
+                    secondary="~2-3 minutes"
                   />
                 </ListItem>
                 <ListItem>
-                  <ListItemText 
-                    primary="10,000 comments" 
-                    secondary="~15-20 minutes" 
+                  <ListItemText
+                    primary="10,000 comments"
+                    secondary="~15-20 minutes"
                   />
                 </ListItem>
                 <ListItem>
-                  <ListItemText 
-                    primary="100,000+ comments" 
-                    secondary="~2-3 hours" 
+                  <ListItemText
+                    primary="100,000+ comments"
+                    secondary="~2-3 hours"
                   />
                 </ListItem>
               </List>

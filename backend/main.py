@@ -10,6 +10,7 @@ import openai
 from dotenv import load_dotenv
 import uuid
 import re
+import time
 
 # Load environment variables
 load_dotenv("config.env")
@@ -39,14 +40,30 @@ analysis_results = {}
 current_analysis_id = None
 cancelled_analyses = set()  # Track cancelled analyses
 
-def analyze_comment_with_ai(comment_text: str) -> Dict[str, Any]:
-    """Analyze a single comment using OpenAI"""
+def log_analysis_step(step: str, details: str = "", comment_id: str = "", analysis_id: str = ""):
+    """Enhanced logging function for analysis steps"""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    prefix = f"[{timestamp}]"
+    
+    if analysis_id:
+        prefix += f" [Analysis-{analysis_id[:8]}]"
+    if comment_id:
+        prefix += f" [Comment-{comment_id[:8]}]"
+    
+    print(f"{prefix} {step}")
+    if details:
+        print(f"{' ' * (len(prefix) + 1)} └─ {details}")
+
+def analyze_comment_with_ai(comment_text: str, comment_id: str = "", analysis_id: str = "") -> Dict[str, Any]:
+    """Analyze a single comment using OpenAI with detailed logging"""
+    log_analysis_step("🔍 STARTING COMMENT ANALYSIS", f"Text: '{comment_text[:50]}{'...' if len(comment_text) > 50 else ''}'", comment_id, analysis_id)
+    
     try:
         # Combined prompt for efficiency
         combined_prompt = f"""
         Analyze this beauty comment: "{comment_text}"
         
-        Return a JSON object with:
+        Return ONLY a valid JSON object (no markdown, no code blocks) with:
         {{
             "sentiment": "positive", "negative", or "neutral",
             "category": "skincare", "makeup", "fragrance", "haircare", or "general",
@@ -55,26 +72,52 @@ def analyze_comment_with_ai(comment_text: str) -> Dict[str, Any]:
         }}
         """
         
+        log_analysis_step("📤 SENDING TO OPENAI", f"Model: gpt-4o-mini, Max tokens: 150, Temperature: 0.1", comment_id, analysis_id)
+        
+        start_time = time.time()
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": combined_prompt}],
             max_tokens=150,
             temperature=0.1
         )
+        api_time = time.time() - start_time
         
         result_text = response.choices[0].message.content.strip()
+        log_analysis_step("📥 RECEIVED OPENAI RESPONSE", f"Response time: {api_time:.2f}s, Response: '{result_text[:100]}{'...' if len(result_text) > 100 else ''}'", comment_id, analysis_id)
+        
+        # Clean the response text (remove markdown code blocks if present)
+        cleaned_text = result_text
+        if cleaned_text.startswith('```json') or cleaned_text.startswith('```'):
+            log_analysis_step("🧹 CLEANING RESPONSE", "Removing markdown code blocks", comment_id, analysis_id)
+            if cleaned_text.startswith('```json'):
+                cleaned_text = cleaned_text[7:]  # Remove ```json
+            if cleaned_text.startswith('```'):
+                cleaned_text = cleaned_text[3:]   # Remove ```
+            if cleaned_text.endswith('```'):
+                cleaned_text = cleaned_text[:-3]  # Remove trailing ```
+            cleaned_text = cleaned_text.strip()
         
         # Try to parse JSON response
         try:
-            result = json.loads(result_text)
-            return {
+            result = json.loads(cleaned_text)
+            log_analysis_step("✅ JSON PARSING SUCCESS", f"Parsed: {result}", comment_id, analysis_id)
+            
+            analysis_result = {
                 "sentiment": result.get("sentiment", "neutral"),
                 "category": result.get("category", "general"),
                 "quality_score": float(result.get("quality_score", 0.5)),
                 "is_spam": bool(result.get("is_spam", False)),
                 "confidence": 0.85
             }
-        except json.JSONDecodeError:
+            
+            log_analysis_step("🎯 ANALYSIS COMPLETE", f"Sentiment: {analysis_result['sentiment']}, Category: {analysis_result['category']}, Quality: {analysis_result['quality_score']:.2f}, Spam: {analysis_result['is_spam']}", comment_id, analysis_id)
+            
+            return analysis_result
+            
+        except json.JSONDecodeError as e:
+            log_analysis_step("⚠️ JSON PARSING FAILED", f"Error: {e}, Using fallback parsing", comment_id, analysis_id)
+            
             # Fallback parsing if JSON fails
             sentiment = "neutral"
             category = "general"
@@ -97,35 +140,48 @@ def analyze_comment_with_ai(comment_text: str) -> Dict[str, Any]:
                 
             if "true" in result_text.lower() and "spam" in result_text.lower():
                 is_spam = True
-                
-            return {
+            
+            fallback_result = {
                 "sentiment": sentiment,
                 "category": category,
                 "quality_score": quality_score,
                 "is_spam": is_spam,
                 "confidence": 0.7
             }
+            
+            log_analysis_step("🔄 FALLBACK PARSING COMPLETE", f"Sentiment: {sentiment}, Category: {category}, Quality: {quality_score:.2f}, Spam: {is_spam}", comment_id, analysis_id)
+            
+            return fallback_result
         
     except Exception as e:
-        print(f"Error analyzing comment: {e}")
+        log_analysis_step("❌ ANALYSIS ERROR", f"Error: {e}", comment_id, analysis_id)
+        
         # Fallback to simple analysis
-        return {
+        fallback_result = {
             "sentiment": "neutral",
             "category": "general", 
             "quality_score": 0.5,
             "is_spam": False,
             "confidence": 0.3
         }
+        
+        log_analysis_step("🆘 EMERGENCY FALLBACK", f"Using default values: {fallback_result}", comment_id, analysis_id)
+        
+        return fallback_result
 
 def process_csv_file(file_path: str) -> List[Dict[str, Any]]:
     """Process CSV file and return structured data"""
+    log_analysis_step("📁 PROCESSING CSV FILE", f"File: {file_path}")
+    
     try:
         df = pd.read_csv(file_path)
+        log_analysis_step("📊 CSV LOADED", f"Rows: {len(df)}, Columns: {list(df.columns)}")
+        
         processed_comments = []
         
-        for _, row in df.iterrows():
+        for index, row in df.iterrows():
             comment = {
-                "comment_id": str(row.get('commentId', '')),
+                "comment_id": str(row.get('commentId', f'comment_{index}')),
                 "text_original": str(row.get('textOriginal', '')),
                 "video_id": str(row.get('videoId', '')),
                 "author_id": str(row.get('authorId', '')),
@@ -134,11 +190,15 @@ def process_csv_file(file_path: str) -> List[Dict[str, Any]]:
                 "analysis": None  # Will be filled during analysis
             }
             processed_comments.append(comment)
+            
+            if (index + 1) % 100 == 0:  # Log every 100 comments
+                log_analysis_step("📝 PROCESSING PROGRESS", f"Processed {index + 1}/{len(df)} comments")
         
+        log_analysis_step("✅ CSV PROCESSING COMPLETE", f"Total comments processed: {len(processed_comments)}")
         return processed_comments
         
     except Exception as e:
-        print(f"Error processing CSV: {e}")
+        log_analysis_step("❌ CSV PROCESSING ERROR", f"Error: {e}")
         return []
 
 # API Routes
@@ -155,6 +215,8 @@ async def upload_comments(file: UploadFile = File(...)):
     """Upload and process CSV file"""
     global comments_data
     
+    log_analysis_step("🚀 FILE UPLOAD STARTED", f"Filename: {file.filename}, Size: {file.size} bytes")
+    
     try:
         # Save uploaded file
         file_path = f"uploads/{file.filename}"
@@ -164,17 +226,24 @@ async def upload_comments(file: UploadFile = File(...)):
             content = await file.read()
             buffer.write(content)
         
+        log_analysis_step("💾 FILE SAVED", f"Saved to: {file_path}")
+        
         # Process CSV
         comments_data = process_csv_file(file_path)
         
-        return {
+        result = {
             "videos_processed": len(set(c["video_id"] for c in comments_data)),
             "comments_processed": len(comments_data),
             "total_rows": len(comments_data),
             "message": "File uploaded and processed successfully"
         }
         
+        log_analysis_step("✅ UPLOAD COMPLETE", f"Videos: {result['videos_processed']}, Comments: {result['comments_processed']}")
+        
+        return result
+        
     except Exception as e:
+        log_analysis_step("❌ UPLOAD FAILED", f"Error: {e}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 @app.post("/api/analysis/start")
@@ -183,10 +252,14 @@ async def start_analysis(request: dict):
     global current_analysis_id, analysis_results
     
     if not comments_data:
+        log_analysis_step("❌ ANALYSIS START FAILED", "No comments to analyze. Please upload a file first.")
         raise HTTPException(status_code=400, detail="No comments to analyze. Please upload a file first.")
     
     analysis_id = str(uuid.uuid4())
     current_analysis_id = analysis_id
+    
+    log_analysis_step("🎯 ANALYSIS STARTED", f"Analysis ID: {analysis_id}, Total comments: {len(comments_data)}")
+    
     analysis_results[analysis_id] = {
         "status": "processing",
         "progress": 0,
@@ -201,22 +274,44 @@ async def start_analysis(request: dict):
     return {"analysis_id": analysis_id, "status": "started"}
 
 async def run_ai_analysis(analysis_id: str):
-    """Run AI analysis on comments"""
+    """Run AI analysis on comments with detailed logging"""
     global analysis_results, comments_data, cancelled_analyses
+    
+    log_analysis_step("🔄 BACKGROUND ANALYSIS STARTED", f"Analysis ID: {analysis_id}", analysis_id=analysis_id)
     
     try:
         results = []
         total = len(comments_data)
+        start_time = time.time()
+        
+        log_analysis_step("⚙️ ANALYSIS PARAMETERS", f"Total comments: {total}, Model: gpt-4o-mini, Delay: 0.2s", analysis_id=analysis_id)
         
         for i, comment in enumerate(comments_data):
             # Check if analysis was cancelled
             if analysis_id in cancelled_analyses:
+                log_analysis_step("🛑 ANALYSIS CANCELLED", f"Stopped at comment {i+1}/{total}", analysis_id=analysis_id)
                 analysis_results[analysis_id]["status"] = "stopped"
                 cancelled_analyses.discard(analysis_id)  # Remove from cancelled set
                 return
             
+            # Log progress every 10 comments or at milestones
+            if (i + 1) % 10 == 0 or i + 1 in [1, 5, 25, 50, 100, 250, 500, 1000]:
+                elapsed_time = time.time() - start_time
+                comments_per_second = (i + 1) / elapsed_time if elapsed_time > 0 else 0
+                estimated_remaining = (total - i - 1) / comments_per_second if comments_per_second > 0 else 0
+                
+                log_analysis_step("📈 PROGRESS UPDATE", 
+                    f"Comment {i+1}/{total} ({((i+1)/total*100):.1f}%) | "
+                    f"Speed: {comments_per_second:.2f} comments/sec | "
+                    f"ETA: {estimated_remaining/60:.1f} minutes", 
+                    analysis_id=analysis_id)
+            
             # Analyze comment with AI
-            analysis = analyze_comment_with_ai(comment["text_original"])
+            analysis = analyze_comment_with_ai(
+                comment["text_original"], 
+                comment["comment_id"], 
+                analysis_id
+            )
             
             # Add analysis to comment
             comment["analysis"] = analysis
@@ -235,9 +330,19 @@ async def run_ai_analysis(analysis_id: str):
         
         # Mark as completed only if not cancelled
         if analysis_id not in cancelled_analyses:
+            total_time = time.time() - start_time
+            avg_time_per_comment = total_time / total
+            
+            log_analysis_step("🎉 ANALYSIS COMPLETED", 
+                f"Total time: {total_time/60:.2f} minutes | "
+                f"Average: {avg_time_per_comment:.2f}s per comment | "
+                f"Total comments analyzed: {total}", 
+                analysis_id=analysis_id)
+            
             analysis_results[analysis_id]["status"] = "completed"
         
     except Exception as e:
+        log_analysis_step("💥 ANALYSIS FAILED", f"Error: {e}", analysis_id=analysis_id)
         analysis_results[analysis_id]["status"] = "failed"
         analysis_results[analysis_id]["error"] = str(e)
 
@@ -262,6 +367,7 @@ async def stop_analysis(analysis_id: str):
     
     # Mark analysis for cancellation
     cancelled_analyses.add(analysis_id)
+    log_analysis_step("🛑 STOP REQUESTED", f"Analysis ID: {analysis_id}", analysis_id=analysis_id)
     
     return {"message": "Analysis stop requested", "analysis_id": analysis_id}
 
@@ -401,5 +507,6 @@ async def search_comments(request: dict):
 
 if __name__ == "__main__":
     import uvicorn
-    print("Starting AI backend on port 8000...")
+    print("🚀 Starting AI backend on port 8000...")
+    print("📊 Enhanced logging enabled - you'll see detailed analysis steps in the terminal")
     uvicorn.run(app, host="0.0.0.0", port=8000)
